@@ -113,6 +113,12 @@ void Analysis::PerformAnalysis() {
 
 void Analysis::FlowAnalysis() {
     ParameterReader paraRdr = paraRdr_;
+    // The boost-invariant rapidity normalisation (see the dedicated block at
+    // the end of the analysis list) must never apply to the fixed experimental
+    // acceptance windows below; those keep the historical rap_max - rap_min.
+    double boost_invariant_dNdy_width =
+        paraRdr.getVal("dNdy_normalization_width", 0.0);
+    paraRdr.setVal("dNdy_normalization_width", 0.0);
     int compute_correlation = paraRdr.getVal("compute_correlation");
     if (compute_correlation == 1) paraRdr.setVal("compute_correlation", 0);
     int flag_charge_dependence = paraRdr.getVal("flag_charge_dependence");
@@ -273,6 +279,39 @@ void Analysis::FlowAnalysis() {
     spvn.push_back(new singleParticleSpectra(paraRdr, path_, ran_gen_ptr_));
     paraRdr.setVal("particle_monval", -2212);
     spvn.push_back(new singleParticleSpectra(paraRdr, path_, ran_gen_ptr_));
+
+    // Boost-invariant (2+1)-d runs: the rapidity density is flat by
+    // construction, so the cleanest estimator of dN/dy is to keep every
+    // particle -- no rapidity cut at all -- and divide by the width iSS
+    // sampled the parents from (y_RB - y_LB). iSS draws the parents uniformly
+    // over that window and normalises the sampled number by it, so the total
+    // number of daughters equals dN/dy times the width. Cutting at an
+    // acceptance window instead and dividing by the window width loses the
+    // daughters that leaked outside it, which biases the yield low by ~1% for
+    // |y| < 0.5 and by much more as the window approaches the sampled edge.
+    // This is deliberately a *separate* output, produced only when
+    // dNdy_normalization_width > 0, so it cannot leak into (3+1)-d analyses
+    // where the density is not flat in rapidity.
+    double dNdy_width = boost_invariant_dNdy_width;
+    if (dNdy_width > 0.) {
+        paraRdr.setVal("rap_type", 1);
+        paraRdr.setVal("rapidity_distribution", 1);
+        paraRdr.setVal("vn_rapidity_dis_pT_min", 0.2);
+        paraRdr.setVal("vn_rapidity_dis_pT_max", 3.0);
+        // wide enough that no daughter of a parent sampled from
+        // [y_LB, y_RB] can reach the edge
+        paraRdr.setVal("rap_min", -3.0 * dNdy_width);
+        paraRdr.setVal("rap_max", 3.0 * dNdy_width);
+        paraRdr.setVal("dNdy_normalization_width", dNdy_width);
+        const int bi_particles[] = {211,   -211,  321,  -321, 2212,
+                                    -2212, 3122,  -3122, 3312, -3312,
+                                    3334,  -3334, 333};
+        for (int i = 0; i < 13; i++) {
+            paraRdr.setVal("particle_monval", bi_particles[i]);
+            spvn.push_back(
+                new singleParticleSpectra(paraRdr, path_, ran_gen_ptr_));
+        }
+    }
 
     // lastly, if we want to compute multi-particle correlations within
     // the same UrQMD events

@@ -35,6 +35,9 @@ class singleParticleSpectra {
 
     int rap_type;
     double rap_min, rap_max;
+    // Boost-invariant runs only: width used to normalise the rapidity density.
+    // <= 0 keeps the historical behaviour, i.e. normalise by rap_max - rap_min.
+    double dNdy_normalization_width;
     int rapidity_distribution_flag;
     int N_rap;
     double rapidity_dis_min, rapidity_dis_max, drap;

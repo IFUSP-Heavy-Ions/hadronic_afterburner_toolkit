@@ -77,6 +77,17 @@ singleParticleSpectra::singleParticleSpectra(
     rap_type = paraRdr.getVal("rap_type");
     rap_min = paraRdr.getVal("rap_min");
     rap_max = paraRdr.getVal("rap_max");
+    // Boost-invariant runs: normalise the rapidity density by the width iSS
+    // sampled the parents from (y_RB - y_LB) instead of by the analysis cut.
+    // iSS draws the parents uniformly over that window, so the total number of
+    // particles equals dN/dy * (y_RB - y_LB). Daughters then leak outside the
+    // window, so counting only what falls inside a narrower cut and dividing by
+    // the cut width loses the leaked ones and biases the yield low -- the more
+    // so the closer the cut sits to the sampled edge. Keeping every particle
+    // (a wide rap_min/rap_max) and dividing by the sampled width is exact.
+    // Leave this at 0 for (3+1)-d runs, where the density is not flat in y.
+    dNdy_normalization_width =
+        paraRdr.getVal("dNdy_normalization_width", 0.0);
 
     if (particle_monval == 9999)  // use pseudo-rapidity for all charged hadrons
         rap_type = 0;
@@ -692,7 +703,9 @@ void singleParticleSpectra::calculate_Qn_vector_negative_charge(
 //! This function outputs the event averaged particle pT-spectra
 //! and flow coefficients
 void singleParticleSpectra::output_Qn_vectors() {
-    double drapidity = rap_max - rap_min;
+    double drapidity = (dNdy_normalization_width > 0.0)
+                           ? dNdy_normalization_width
+                           : (rap_max - rap_min);
     // pT-integrated flow
     ostringstream filename;
     filename << path_ << "/particle_" << particle_monval << "_vndata";
@@ -702,6 +715,7 @@ void singleParticleSpectra::output_Qn_vectors() {
         filename << "_y_";
     }
     filename << rap_min << "_" << rap_max;
+    if (dNdy_normalization_width > 0.) filename << "_boostinv";
     if (bWeakFeedDown_) filename << "_weakFD";
     filename << ".dat";
     ofstream output(filename.str().c_str());
@@ -769,6 +783,7 @@ void singleParticleSpectra::output_Qn_vectors() {
         filename_diff << "_y_";
     }
     filename_diff << rap_min << "_" << rap_max;
+    if (dNdy_normalization_width > 0.) filename_diff << "_boostinv";
     if (bWeakFeedDown_) filename_diff << "_weakFD";
     filename_diff << ".dat";
 
